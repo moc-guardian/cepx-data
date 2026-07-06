@@ -1,0 +1,108 @@
+[project]
+name = "cepx-data"
+version = "0.1.0"
+description = "Offline Brazilian CEP database for cepx's local provider, built from CEP Aberto (ODbL)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = [
+    "cep",
+    "cepx",
+    "cepaberto",
+    "correios",
+    "zipcode",
+    "offline",
+    "sqlite",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Typing :: Typed",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Natural Language :: Portuguese (Brazilian)",
+]
+# No runtime dependencies: this package only ships data and a path accessor.
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cepx_data"]
+
+# The database is a build artifact (git-ignored), so force-include it into both
+# the sdist and the wheel (uv build makes the wheel FROM the sdist, so the sdist
+# must carry it). It must exist at build time — run `make data` first; CI does.
+[tool.hatch.build.targets.sdist.force-include]
+"src/cepx_data/data/cepx.sqlite" = "src/cepx_data/data/cepx.sqlite"
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/cepx_data/data/cepx.sqlite" = "cepx_data/data/cepx.sqlite"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "ty>=0.0.1a1",
+    "pre-commit>=4",
+    "pytest>=8",
+    "pytest-cov>=6",
+]
+
+[tool.ruff]
+line-length = 80
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+]
+
+[tool.ty.environment]
+python-version = "3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast test (no network)",
+]
+addopts = """
+--cov=cepx_data \
+--cov-report=term-missing \
+--cov-fail-under=80
+"""
+
+[tool.coverage.run]
+source = ["cepx_data"]
+branch = true
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+fail_under = 100
+
+exclude_also = [
+    "def __repr__",
+    "def __str__",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING",
+]
