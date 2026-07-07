@@ -36,13 +36,27 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       # Fetch CEP Aberto dumps and build the bundled database. Requires the
-      # repo secrets CEPABERTO_COOKIE and CEPABERTO_TOKEN to hold a CURRENT
-      # logged-in session (they expire -- refresh before a release).
+      # repo secrets CEPABERTO_COOKIE and CEPABERTO_TOKEN to hold a non-expired
+      # session.
       - name: Build offline database
         env:
           CEPABERTO_COOKIE: ${{ secrets.CEPABERTO_COOKIE }}
           CEPABERTO_TOKEN: ${{ secrets.CEPABERTO_TOKEN }}
         run: make data
+
+      # Guard: the wheel builds fine without the database (artifacts is a
+      # no-op when absent), so a failed/partial `make data` could otherwise
+      # publish a DB-less or truncated wheel. Fail loudly instead.
+      - name: Verify database was built
+        run: |
+          db=src/cepx_data/data/cepx.sqlite
+          test -f "$db" || { echo "::error::$db missing — make data failed"; exit 1; }
+          size=$(stat -c%s "$db")
+          echo "database size: $size bytes"
+          if [ "$size" -lt 10000000 ]; then
+            echo "::error::$db is only $size bytes — build looks incomplete"
+            exit 1
+          fi
 
       - name: Build
         run: uv build
