@@ -17,7 +17,7 @@ DB_FILENAME = "cepx.sqlite"
 try:
     __version__ = version("cepx-data")
 except PackageNotFoundError:  # pragma: no cover
-    __version__ = "0.0.0"
+    __version__ = "0.1.1"
 
 
 def db_path() -> str:
