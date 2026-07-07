@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/moc-guardian/cepx-data/compare/v0.1.1...v0.1.2) (2026-07-07)
+
+
+### Documentation
+
+* fix readme link to cepx ([0eac172](https://github.com/moc-guardian/cepx-data/commit/0eac172b0041acff13c4dcfea16eaf7b44ea4847))
+
 ## [0.1.1](https://github.com/moc-guardian/cepx-data/compare/v0.1.0...v0.1.1) (2026-07-07)
 
 
