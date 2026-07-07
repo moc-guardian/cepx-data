@@ -1,6 +1,6 @@
 [project]
 name = "cepx-data"
-version = "0.1.1"
+version = "0.1.2"
 description = "Offline Brazilian CEP database for cepx's local provider, built from CEP Aberto (ODbL)."
 readme = "README.md"
 requires-python = ">=3.9"
