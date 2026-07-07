@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Download CEP Aberto per-state CEP dumps using an authenticated session.
 
-CEP Aberto gates dumps behind a login, so this reuses *your* logged-in browser
-session. Copy the session cookie and the form authenticity_token from a browser
+CEP Aberto gates dumps behind a login, so this reuses logged-in browser session.
+Copy the session cookie and the form authenticity_token from a browser
 download request (DevTools -> Network -> "Copy as cURL") and export them:
 
     export CEPABERTO_COOKIE='_cepaberto_session=...; remember_user_token=...'
@@ -13,9 +13,6 @@ Each state (UF) is split into 5 parts; this fetches all 27 x 5 = 135 files as
 dumps/<UF>.cepaberto_parte_<n>.csv, plus the two reference tables
 dumps/cities.csv and dumps/states.csv (endpoint name=cities / name=states, no
 part), all ready for load_cepaberto.py.
-
-The cookie/token are personal session secrets that expire -- keep them out of
-version control. Respect CEP Aberto's terms and rate limits (hence --delay).
 """
 
 from __future__ import annotations
@@ -65,12 +62,12 @@ UFS = [
 
 
 def _normalize_token(token: str) -> str:
-    """Accept a raw or already-URL-encoded token; return it URL-encoded once."""
     return urllib.parse.quote(urllib.parse.unquote(token), safe="")
 
 
 def _looks_like_login_page(body: bytes) -> bool:
     head = body[:512].lstrip().lower()
+
     return head.startswith(b"<") or b"sign_in" in head or b"<html" in head
 
 
@@ -98,9 +95,22 @@ def fetch(
     token_enc: str,
     timeout: float,
 ) -> bytes:
-    params = (
-        {"name": name, "part": part} if part is not None else {"name": name}
-    )
+    params = {
+        "name": name,
+    }
+
+    if part is not None:
+        params["part"] = part
+
+    headers = {
+        "User-Agent": "cepx-data (github.com/moc-guardian/cepx-data)",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept-Encoding": "identity",
+        "Origin": "https://www.cepaberto.com",
+        "Referer": "https://www.cepaberto.com/downloads/new",
+        "Cookie": cookie,
+    }
+
     query = urllib.parse.urlencode(params)
     data = f"_method=post&authenticity_token={token_enc}".encode()
 
@@ -108,22 +118,13 @@ def fetch(
         f"{_URL}?{query}",
         data=data,
         method="POST",
-        headers={
-            "User-Agent": "cepx-fetch (github.com/araggohnxd/cepx)",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept-Encoding": "identity",
-            "Origin": "https://www.cepaberto.com",
-            "Referer": "https://www.cepaberto.com/downloads/new",
-            "Cookie": cookie,
-        },
+        headers=headers,
     )
 
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
 
 
-# A failed attempt is worth retrying only if it looks transient (5xx, timeout,
-# connection reset, truncated ZIP) -- not on a 4xx, which won't fix itself.
 def _is_retryable(error: Exception) -> bool:
     if isinstance(error, urllib.error.HTTPError):
         return error.code >= 500
@@ -143,7 +144,6 @@ def _download_one(
     retries: int,
     abort: threading.Event,
 ) -> tuple[str, int | None, str | None]:
-    """Fetch+extract+save one task. Returns (filename, csv_bytes, error)."""
     last_error = "unknown error"
 
     for attempt in range(retries + 1):
@@ -168,7 +168,7 @@ def _download_one(
                 time.sleep(delay)  # optional per-request throttle
 
             return (filename, len(csv_bytes), None)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             if isinstance(err, urllib.error.HTTPError):
                 last_error = f"HTTP {err.code}"
             else:
@@ -199,7 +199,10 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--parts", type=int, default=5, help="parts per state (default 5)"
+        "--parts",
+        type=int,
+        default=5,
+        help="parts per state (default 5)",
     )
 
     parser.add_argument(
@@ -213,7 +216,10 @@ def main() -> None:
         "--timeout",
         type=float,
         default=180.0,
-        help="per-request timeout in seconds (default 180; SP is large)",
+        help=(
+            "per-request timeout in seconds"
+            "(default 180 for large states, like SP)"
+        ),
     )
 
     parser.add_argument(
@@ -261,7 +267,9 @@ def main() -> None:
                 if part is not None
                 else {"name": name}
             )
+
             query = urllib.parse.urlencode(params)
+
             print(f"POST {_URL}?{query} -> {filename}")
 
         print(f"\n{len(tasks)} requests (dry run)")
@@ -272,10 +280,7 @@ def main() -> None:
     token = os.environ.get("CEPABERTO_TOKEN")
 
     if not cookie or not token:
-        raise SystemExit(
-            "set CEPABERTO_COOKIE and CEPABERTO_TOKEN env vars "
-            "(see this file's docstring)"
-        )
+        raise SystemExit("set CEPABERTO_COOKIE and CEPABERTO_TOKEN env vars")
 
     token_enc = _normalize_token(token)
 
@@ -320,8 +325,8 @@ def main() -> None:
 
     if abort.is_set():
         print(
-            "session expired mid-run (got a login page). Refresh "
-            "CEPABERTO_COOKIE/CEPABERTO_TOKEN and rerun."
+            "session expired mid-run (got a login page). "
+            "Refresh CEPABERTO_COOKIE/CEPABERTO_TOKEN and rerun."
         )
 
     if failures:

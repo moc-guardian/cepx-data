@@ -5,12 +5,11 @@ This is a build-time ETL tool, not part of the shipped runtime. It turns a
 source dataset of CEP ranges into a compact SQLite file:
 
   - ranges(start, end, name_id)  with start as the primary key (indexed)
-  - names(id, name)              deduplicated "UF|city|neighborhood|street"
+  - names(id, name)              deduplicated "state|city|neighborhood|street"
 
 A lookup then becomes a single indexed range query. Point it at a real source
-(e.g. the Correios DNE, if you are licensed to use it) by feeding rows to
-`build`. The `--demo` mode fabricates a small synthetic dataset so the
-offline path is runnable end-to-end without any licensed data.
+by feeding rows to `build`. The `--demo` mode fabricates a small synthetic
+dataset so the offline path is runnable end-to-end without any licensed data.
 
 Usage:
     python tools/build_cep_db.py --demo [--out src/cepx/data/cepx.sqlite]
@@ -40,10 +39,6 @@ DEFAULT_OUT = os.path.normpath(
 
 
 def build(rows: Iterable[Row], out_path: str) -> tuple[int, int]:
-    """Write `rows` into a fresh SQLite database at `out_path`.
-
-    Returns (n_ranges, n_unique_names).
-    """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     if os.path.exists(out_path):
         os.remove(out_path)
@@ -68,9 +63,11 @@ def build(rows: Iterable[Row], out_path: str) -> tuple[int, int]:
 
     def name_id(name: str) -> int:
         i = name_ids.get(name)
+
         if i is None:
             i = len(name_ids)
             name_ids[name] = i
+
         return i
 
     range_rows = []

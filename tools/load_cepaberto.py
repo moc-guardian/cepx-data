@@ -9,16 +9,12 @@ exact match with no lookup-code changes.
 
 The dumps are headerless CSV with positional columns:
 
-    CEP file   cep, logradouro, complemento, bairro, cidade_id, estado_id
-    cities.csv cidade_id, nome, estado_id
-    states.csv estado_id, nome, sigla
+    CEP file   -> cep, logradouro, complemento, bairro, cidade_id, estado_id
+    cities.csv -> cidade_id, nome, estado_id
+    states.csv -> estado_id, nome, sigla
 
 City and state are numeric IDs in the CEP file; cepx's Address needs names, so
-cidade_id is resolved via cities.csv and estado_id via states.csv (-> UF sigla).
-
-ODbL obligation: any database you build and distribute from this data must
-credit CEP Aberto and stay under ODbL (share-alike). Ship it as a separate,
-attributed data package -- never inside cepx's MIT wheel.
+cidade_id is resolved via cities.csv and estado_id via states.csv.
 
 Usage:
     python tools/load_cepaberto.py "*.cepaberto_*.csv" \\
@@ -38,7 +34,6 @@ from build_cep_db import Row, build
 
 _NON_DIGITS = re.compile(r"\D+")
 
-# Positional layout of the headerless CEP dump rows.
 _COL_CEP = 0
 _COL_STREET = 1
 _COL_COMPLEMENTO = 2
@@ -48,7 +43,6 @@ _COL_ESTADO_ID = 5
 
 
 def _load_id_map(path: str, value_col: int) -> dict[int, str]:
-    """Read a headerless `id, ..., value` reference CSV into {id: value}."""
     mapping: dict[int, str] = {}
 
     with open(path, encoding="utf-8", newline="") as fh:
@@ -141,7 +135,11 @@ def main() -> None:
     cities = _load_id_map(args.cities, value_col=1)  # cidade_id -> nome
     states = _load_id_map(args.states, value_col=2)  # estado_id -> sigla
 
-    paths = sorted({p for pattern in args.inputs for p in glob.glob(pattern)})
+    paths = sorted({
+        p for pattern
+        in args.inputs
+        for p in glob.glob(pattern)
+    })  # fmt: skip
 
     if not paths:
         raise SystemExit(f"no files matched: {args.inputs}")
@@ -156,9 +154,7 @@ def main() -> None:
         f"{len(cities):,} cities, {len(states):,} states, {size_mb:.2f} MiB"
     )
 
-    print(
-        "  data: CEP Aberto (https://www.cepaberto.com/) - ODbL; attribute it."
-    )
+    print("  data: CEP Aberto (https://www.cepaberto.com/) - ODbL.")
 
 
 if __name__ == "__main__":
