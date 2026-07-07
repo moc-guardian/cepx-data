@@ -1,6 +1,6 @@
 # cepx-data
 
-Offline Brazilian CEP database for [cepx](https://github.com/araggohnxd/cepx)'s
+Offline Brazilian CEP database for [cepx](https://github.com/moc-guardian/cepx)'s
 local provider. It ships a prebuilt SQLite database derived from
 [CEP Aberto](https://www.cepaberto.com/), plus the pipeline that builds it.
 
