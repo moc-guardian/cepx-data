@@ -40,17 +40,16 @@ dependencies = []
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The database is a git-ignored build artifact. `artifacts` re-includes it when
+# present (release builds, after `make data`) and is a no-op when absent (CI
+# test job, dev, editable installs) — unlike force-include, which errors on a
+# missing file. Applied at [tool.hatch.build] so it covers both sdist and wheel
+# (uv build makes the wheel FROM the sdist, so the sdist must carry it too).
+[tool.hatch.build]
+artifacts = ["src/cepx_data/data/cepx.sqlite"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/cepx_data"]
-
-# The database is a build artifact (git-ignored), so force-include it into both
-# the sdist and the wheel (uv build makes the wheel FROM the sdist, so the sdist
-# must carry it). It must exist at build time — run `make data` first; CI does.
-[tool.hatch.build.targets.sdist.force-include]
-"src/cepx_data/data/cepx.sqlite" = "src/cepx_data/data/cepx.sqlite"
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/cepx_data/data/cepx.sqlite" = "cepx_data/data/cepx.sqlite"
 
 [dependency-groups]
 dev = [
