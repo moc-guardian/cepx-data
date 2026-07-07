@@ -36,6 +36,12 @@ classifiers = [
 # No runtime dependencies: this package only ships data and a path accessor.
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/moc-guardian/cepx-data"
+Repository = "https://github.com/moc-guardian/cepx-data"
+Issues = "https://github.com/moc-guardian/cepx-data/issues"
+Changelog = "https://github.com/moc-guardian/cepx-data/blob/main/CHANGELOG.md"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
