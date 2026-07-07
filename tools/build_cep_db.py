@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Build the offline CEP database consumed by cepx's LocalProvider.
 
-This is a build-time ETL tool, not part of the shipped runtime. It turns a
-source dataset of CEP ranges into a compact SQLite file:
+This is a build-time ETL tool, not part of the shipped runtime. CEP Aberto is
+point data (one row per CEP), so the schema is normalized to keep it compact:
 
-  - ranges(start, end, name_id)  with start as the primary key (indexed)
-  - names(id, name)              deduplicated "state|city|neighborhood|street"
+  - ceps(cep PK, uf_id, city_id, neigh_id, street_id)   -- cep is the rowid
+  - states(id, sigla) / cities(id, nome)
+  - neighborhoods(id, nome) / streets(id, nome)         -- deduplicated
 
-A lookup then becomes a single indexed range query. Point it at a real source
-by feeding rows to `build`. The `--demo` mode fabricates a small synthetic
-dataset so the offline path is runnable end-to-end without any licensed data.
+The `--demo` mode fabricates a small synthetic dataset so the pipeline is
+runnable end-to-end without any licensed data.
 
 Usage:
-    python tools/build_cep_db.py --demo [--out src/cepx/data/cepx.sqlite]
+    python tools/build_cep_db.py --demo [--out src/cepx_data/data/cepx.sqlite]
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ import argparse
 import os
 import random
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
-# A row of source data: (start_cep, end_cep, uf, city, neighborhood, street)
-Row = tuple[int, int, str, str, str, str]
+# A row of source data: (cep, uf, city, neighborhood, street)
+Row = tuple[int, str, str, str, str]
 
 DEFAULT_OUT = os.path.normpath(
     os.path.join(
@@ -37,67 +37,124 @@ DEFAULT_OUT = os.path.normpath(
     )
 )
 
+_DDL = """
+CREATE TABLE states (
+    id INTEGER PRIMARY KEY,
+    sigla TEXT NOT NULL
+);
 
-def build(rows: Iterable[Row], out_path: str) -> tuple[int, int]:
+CREATE TABLE cities (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL
+);
+
+CREATE TABLE neighborhoods (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL
+);
+
+CREATE TABLE streets (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL
+);
+
+CREATE TABLE ceps (
+    cep INTEGER PRIMARY KEY,
+    uf_id INTEGER NOT NULL REFERENCES states(id),
+    city_id INTEGER NOT NULL REFERENCES cities(id),
+    neigh_id INTEGER NOT NULL REFERENCES neighborhoods(id),
+    street_id INTEGER NOT NULL REFERENCES streets(id)
+);
+"""
+
+
+def _interner() -> tuple[dict[str, int], Callable[[str], int]]:
+    """Return (mapping, intern_fn) that assigns a stable id to each value."""
+    mapping: dict[str, int] = {}
+
+    def intern(value: str) -> int:
+        i = mapping.get(value)
+        if i is None:
+            i = len(mapping)
+            mapping[value] = i
+        return i
+
+    return mapping, intern
+
+
+def build(rows: Iterable[Row], out_path: str) -> dict[str, int]:
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
     if os.path.exists(out_path):
         os.remove(out_path)
 
     con = sqlite3.connect(out_path)
     con.execute("PRAGMA journal_mode=OFF")
     con.execute("PRAGMA synchronous=OFF")
+    con.executescript(_DDL)
 
-    con.execute(
-        "CREATE TABLE names (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
-    )
+    states, uf_id = _interner()
+    cities, city_id = _interner()
+    neighs, neigh_id = _interner()
+    streets, street_id = _interner()
 
-    con.execute(
-        "CREATE TABLE ranges ("
-        "  start INTEGER PRIMARY KEY,"
-        "  end INTEGER NOT NULL,"
-        "  name_id INTEGER NOT NULL REFERENCES names(id)"
-        ")"
-    )
+    cep_rows = [
+        (
+            cep,
+            uf_id(uf),
+            city_id(city),
+            neigh_id(neigh),
+            street_id(street),
+        )
+        for cep, uf, city, neigh, street in rows
+    ]
 
-    name_ids: dict[str, int] = {}
-
-    def name_id(name: str) -> int:
-        i = name_ids.get(name)
-
-        if i is None:
-            i = len(name_ids)
-            name_ids[name] = i
-
-        return i
-
-    range_rows = []
-
-    for start, end, uf, city, neighborhood, street in rows:
-        name = f"{uf}|{city}|{neighborhood}|{street}"
-        range_rows.append((start, end, name_id(name)))
-
-    con.executemany(
-        "INSERT INTO names (id, name) VALUES (?, ?)",
-        ((i, name) for name, i in name_ids.items()),
-    )
+    for table, mapping in (
+        ("states", states),
+        ("cities", cities),
+        ("neighborhoods", neighs),
+        ("streets", streets),
+    ):
+        con.executemany(
+            f"INSERT INTO {table} VALUES (?, ?)",
+            ((i, value) for value, i in mapping.items()),
+        )
 
     con.executemany(
-        "INSERT INTO ranges (start, end, name_id) VALUES (?, ?, ?)",
-        range_rows,
+        "INSERT INTO ceps (cep, uf_id, city_id, neigh_id, street_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        cep_rows,
     )
 
     con.commit()
     con.execute("VACUUM")
     con.close()
 
-    return len(range_rows), len(name_ids)
+    return {
+        "ceps": len(cep_rows),
+        "states": len(states),
+        "cities": len(cities),
+        "neighborhoods": len(neighs),
+        "streets": len(streets),
+    }
 
 
 def _demo_rows(n: int, seed: int = 42) -> list[Row]:
-    """Fabricate `n` non-overlapping CEP ranges with realistic repetition."""
+    """Fabricate `n` CEPs with realistic repetition across the dimensions."""
     rng = random.Random(seed)
 
-    ufs = ["SP", "RJ", "MG", "BA", "PR", "RS", "PE", "CE", "SC", "GO"]
+    ufs = [
+        "SP",
+        "RJ",
+        "MG",
+        "BA",
+        "PR",
+        "RS",
+        "PE",
+        "CE",
+        "SC",
+        "GO",
+    ]
 
     cities = [
         "São Paulo",
@@ -127,28 +184,24 @@ def _demo_rows(n: int, seed: int = 42) -> list[Row]:
     ]
 
     rows: list[Row] = []
-    cursor = 1_000_000
-    stride = max(2, (99_000_000 - cursor) // n)
+    cep = 1_000_000
+    stride = max(1, (99_000_000 - cep) // n)
 
     for _ in range(n):
-        start = cursor + rng.randint(0, stride)
-        end = start + rng.randint(0, min(500, stride))
+        cep += rng.randint(1, stride)
 
-        if end >= 99_999_999:
+        if cep >= 99_999_999:
             break
 
         rows.append(
             (
-                start,
-                end,
+                cep,
                 rng.choice(ufs),
                 rng.choice(cities),
                 rng.choice(neighs),
                 rng.choice(streets),
             )
         )
-
-        cursor = end + 1
 
     return rows
 
@@ -172,7 +225,7 @@ def main() -> None:
         "--demo-size",
         type=int,
         default=50_000,
-        help="number of synthetic ranges for --demo",
+        help="number of synthetic CEPs for --demo",
     )
 
     args = parser.parse_args()
@@ -181,18 +234,15 @@ def main() -> None:
         parser.error("no source dataset wired up; use --demo for now")
 
     rows = _demo_rows(args.demo_size)
-    n_ranges, n_names = build(rows, args.out)
+    counts = build(rows, args.out)
     size_mb = os.path.getsize(args.out) / (1024 * 1024)
 
     print(f"wrote {args.out}")
-    print(f"  {n_ranges:,} ranges, {n_names:,} unique names, {size_mb:.2f} MiB")
-
-    if rows:
-        sample = rows[len(rows) // 2]
-
-        print(
-            f"  sample lookup key inside DB: {sample[0]:08d} .. {sample[1]:08d}"
-        )
+    print(
+        f"  {counts['ceps']:,} CEPs, {counts['cities']:,} cities, "
+        f"{counts['neighborhoods']:,} neighborhoods, "
+        f"{counts['streets']:,} streets, {size_mb:.2f} MiB"
+    )
 
 
 if __name__ == "__main__":

@@ -2,10 +2,9 @@
 """Load CEP Aberto dumps into the offline cepx SQLite database.
 
 CEP Aberto (https://www.cepaberto.com/) publishes per-state dumps under the
-Open Database License (ODbL). The data is *point* data: one row per CEP, not
-street-level ranges. Each CEP is stored as a degenerate range
-(start == end == cep), which the range-based LocalProvider resolves as an
-exact match with no lookup-code changes.
+Open Database License (ODbL). The data is *point* data: one row per CEP. Each
+CEP becomes one row in the normalized `ceps` table (keyed on the CEP itself);
+build_cep_db.py handles the schema.
 
 The dumps are headerless CSV with positional columns:
 
@@ -90,8 +89,7 @@ def _iter_rows(
                 street = (row[_COL_STREET] or "").strip()
                 bairro = (row[_COL_BAIRRO] or "").strip()
 
-                # point data -> degenerate range (start == end == cep)
-                yield (cep, cep, uf, city, bairro, street)
+                yield (cep, uf, city, bairro, street)
 
 
 def main() -> None:
@@ -144,14 +142,15 @@ def main() -> None:
     if not paths:
         raise SystemExit(f"no files matched: {args.inputs}")
 
-    n_ranges, n_names = build(_iter_rows(paths, cities, states), args.out)
+    counts = build(_iter_rows(paths, cities, states), args.out)
     size_mb = os.path.getsize(args.out) / (1024 * 1024)
 
     print(f"wrote {args.out}")
 
     print(
-        f"  {n_ranges:,} CEPs, {n_names:,} unique addresses, "
-        f"{len(cities):,} cities, {len(states):,} states, {size_mb:.2f} MiB"
+        f"  {counts['ceps']:,} CEPs, {counts['cities']:,} cities, "
+        f"{counts['neighborhoods']:,} neighborhoods, "
+        f"{counts['streets']:,} streets, {size_mb:.2f} MiB"
     )
 
     print("  data: CEP Aberto (https://www.cepaberto.com/) - ODbL.")
