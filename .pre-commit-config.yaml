@@ -28,11 +28,16 @@ repos:
     rev: v0.0.56
     hooks:
       - id: ty
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.27
+    hooks:
+      - id: uv-lock
+        name: Update lockfile
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest
+        entry: uv run --no-sync pytest
         language: system
         types: [python]
         pass_filenames: false
