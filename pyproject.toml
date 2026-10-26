@@ -70,6 +70,9 @@ dev = [
 line-length = 80
 src = ["src", "tests", "tools"]
 
+[tool.ruff.format]
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
@@ -87,9 +90,7 @@ python-version = "3.9"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = [
-    "unit: fast test (no network)",
-]
+markers = ["unit: fast test (no network)"]
 addopts = """
 --strict-markers
 """
