@@ -91,14 +91,16 @@ markers = [
     "unit: fast test (no network)",
 ]
 addopts = """
---cov=cepx_data \
---cov-report=term-missing \
---cov-fail-under=80
+--strict-markers
 """
 
+# `command_line` lets `coverage run` stand alone, so the threshold in
+# [tool.coverage.report] below is the only place coverage can fail — pytest
+# no longer carries a second, lower --cov-fail-under that disagrees with it.
 [tool.coverage.run]
 source = ["cepx_data"]
 branch = true
+command_line = "-m pytest"
 
 [tool.coverage.report]
 skip_empty = true

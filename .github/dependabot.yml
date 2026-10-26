@@ -1,0 +1,27 @@
+# A pinned SHA never moves, which is the point — and means a security fix in
+# an action never arrives either. This reopens that channel: Dependabot bumps
+# the SHA and rewrites the trailing version comment.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Keeps the dev toolchain (ruff, ty, pytest) moving. The pre-commit hooks
+  # run these out of the project environment, so one bump moves CI and the
+  # hooks together.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      python:
+        patterns: ["*"]
