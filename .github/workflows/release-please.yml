@@ -3,18 +3,26 @@ name: Release
 on:
   push:
     branches: [main]
+  # release-please only reports a release when its pull request merges, so a
+  # publish that failed after the tag was cut cannot be retried by pushing
+  # again — and re-running the old job replays the commit that failed. This
+  # matters more here than in a plain package: the publish rebuilds the
+  # database first, so it can fail on an expired CEP Aberto session alone.
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
+      released: ${{ steps.release.outputs.release_created }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
           config-file: release-please-config.json
@@ -22,18 +30,32 @@ jobs:
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    # always() lets a manual dispatch publish without waiting on a release
+    # that was already cut, while still blocking on a release-please failure.
+    if: >-
+      ${{ always()
+      && needs.release-please.result != 'failure'
+      && needs.release-please.result != 'cancelled'
+      && (needs.release-please.outputs.released == 'true'
+      || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/cepx-data
     permissions:
+      contents: read
+      # Required for PyPI Trusted Publishing to mint an OIDC token.
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
 
       # Fetch CEP Aberto dumps and build the bundled database. Requires the
       # repo secrets CEPABERTO_COOKIE and CEPABERTO_TOKEN to hold a non-expired
@@ -49,6 +71,8 @@ jobs:
       # publish a DB-less or truncated wheel. Fail loudly instead.
       - name: Verify database was built
         run: |
+          set -euo pipefail
+
           db=src/cepx_data/data/cepx.sqlite
           test -f "$db" || { echo "::error::$db missing — make data failed"; exit 1; }
           size=$(stat -c%s "$db")
@@ -61,5 +85,12 @@ jobs:
       - name: Build
         run: uv build
 
+      # A malformed README or classifier is rejected by PyPI only at upload,
+      # after the tag exists. Catch it here instead.
+      - name: Check package metadata
+        run: uvx twine check dist/*.whl dist/*.tar.gz
+
+      # --check-url makes the upload idempotent: a retry after a half-finished
+      # publish skips the files that already landed instead of failing on them.
       - name: Publish to PyPI (Trusted Publishing)
-        run: uv publish
+        run: uv publish --check-url https://pypi.org/simple/cepx-data/

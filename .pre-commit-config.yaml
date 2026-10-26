@@ -8,38 +8,74 @@ repos:
     rev: v4.6.0
     hooks:
       - id: commitizen
+        name: Check commit message
         stages:
           - commit-msg
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+  - repo: local
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-toml
-      - id: check-added-large-files
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.6
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-  - repo: https://github.com/astral-sh/ty-pre-commit
-    rev: v0.0.56
-    hooks:
-      - id: ty
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.27
-    hooks:
+      # The published hooks pin their own tools, which dependabot does not
+      # bump with the project's. The two then disagree and `make check`
+      # passes while CI fails on the same files. Run the one we depend on.
       - id: uv-lock
         name: Update lockfile
+        entry: uv lock
+        language: system
+        files: ^(uv\.lock|uv\.toml|pyproject\.toml)$
+        pass_filenames: false
+      - id: ruff
+        name: Lint code
+        entry: uv run --no-sync ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: Format code
+        entry: uv run --no-sync ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ty
+        name: Type check
+        entry: uv run --no-sync ty check
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-ast
+        name: Check valid Python AST
+      - id: check-yaml
+        name: Check valid YAML files
+        args: [--allow-multiple-documents]
+      - id: check-json
+        name: Check valid JSON files
+      - id: pretty-format-json
+        name: Pretty-format JSON files
+        args: [--autofix, --no-ensure-ascii, --no-sort-keys]
+      - id: check-toml
+        name: Check valid TOML files
+      - id: check-added-large-files
+        name: Check for large files
+      - id: check-merge-conflict
+        name: Check for merge conflict markers
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end-of-file newline
   - repo: local
     hooks:
       - id: pytest
-        name: pytest
-        entry: uv run --no-sync pytest
+        name: Run tests
+        entry: uv run --no-sync coverage run
         language: system
-        types: [python]
+        pass_filenames: false
+        stages:
+          - pre-push
+      - id: coverage
+        name: Report coverage
+        entry: uv run --no-sync coverage report
+        language: system
         pass_filenames: false
         stages:
           - pre-push
